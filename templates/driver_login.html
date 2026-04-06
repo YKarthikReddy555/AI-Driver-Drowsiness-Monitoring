@@ -1,0 +1,32 @@
+{% extends "login_base.html" %}
+
+{% block title %}Driver Login{% endblock %}
+{% block page_title %}Driver Login{% endblock %}
+{% block page_desc %}Access your AI dashboard{% endblock %}
+{% block form_action %}{{ url_for('driver_login') }}{% endblock %}
+
+{% block form_content %}
+<div class="mb-3">
+  <label for="email" class="form-label text-secondary small">Driver Email</label>
+  <input type="email" class="form-control bg-black text-light border-secondary" id="email" name="email" required autofocus>
+</div>
+<div class="mb-3">
+  <label for="password" class="form-label text-secondary small">Password</label>
+  <div class="pw-group">
+    <input type="password" class="form-control bg-black text-light border-secondary" id="password" name="password" required>
+    <button type="button" class="pw-toggle" onclick="togglePassword(this, 'password')">
+      <i class="fas fa-eye"></i>
+    </button>
+  </div>
+  <div class="text-end mt-1">
+    <a href="{{ url_for('forgot_password', role='driver') }}" class="text-secondary small">Forgot Password?</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_links %}
+<div class="text-center mt-4">
+  <span class="text-secondary small">Don't have an account?</span>
+  <a href="{{ url_for('driver_register') }}" class="text-decoration-none ms-1">Register as a driver</a>
+</div>
+{% endblock %}

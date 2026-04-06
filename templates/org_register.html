@@ -1,0 +1,96 @@
+{% extends "login_base.html" %}
+
+{% block title %}Organisation Registration{% endblock %}
+{% block page_title %}Register Organisation{% endblock %}
+{% block page_desc %}Create a new fleet manager account{% endblock %}
+{% block form_action %}{{ url_for('org_register') }}{% endblock %}
+
+{% block form_content %}
+<div class="mb-3">
+  <label for="name" class="form-label text-secondary small">Organisation Name</label>
+  <input type="text" class="form-control bg-black text-light border-secondary" id="name" name="name" required autofocus>
+</div>
+<div class="mb-3">
+  <label for="email" class="form-label text-secondary small">Email Address</label>
+  <input type="email" class="form-control bg-black text-light border-secondary" id="email" name="email" required>
+</div>
+<div class="mb-3">
+  <label for="password" class="form-label text-secondary small">Password</label>
+  <div class="pw-group">
+    <input type="password" class="form-control bg-black text-light border-secondary" id="password" name="password" required>
+    <button type="button" class="pw-toggle" onclick="togglePassword(this, 'password')">
+      <i class="fas fa-eye"></i>
+    </button>
+  </div>
+  <ul id="password-reqs" class="text-secondary mt-2 mb-0 list-unstyled" style="font-size: 0.8rem;">
+    <li id="req-length" class="text-danger">❌ At least 8 characters</li>
+    <li id="req-upper" class="text-danger">❌ One uppercase letter</li>
+    <li id="req-lower" class="text-danger">❌ One lowercase letter</li>
+    <li id="req-number" class="text-danger">❌ One number</li>
+    <li id="req-special" class="text-danger">❌ One special character</li>
+  </ul>
+</div>
+<div class="mb-3">
+  <label for="confirm" class="form-label text-secondary small">Confirm Password</label>
+  <div class="pw-group">
+    <input type="password" class="form-control bg-black text-light border-secondary" id="confirm" name="confirm" required>
+    <button type="button" class="pw-toggle" onclick="togglePassword(this, 'confirm')">
+      <i class="fas fa-eye"></i>
+    </button>
+  </div>
+  <div id="match-msg" class="small mt-1"></div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const pwInput = document.getElementById("password");
+    if (!pwInput) return;
+
+    const reqs = [
+      { el: document.getElementById("req-length"), regex: /.{8,}/ },
+      { el: document.getElementById("req-upper"), regex: /[A-Z]/ },
+      { el: document.getElementById("req-lower"), regex: /[a-z]/ },
+      { el: document.getElementById("req-number"), regex: /\d/ },
+      { el: document.getElementById("req-special"), regex: /[!@#$%^&*(),.?":{}|<>]/ }
+    ];
+
+    pwInput.addEventListener("input", (e) => {
+      const val = e.target.value;
+      reqs.forEach(req => {
+        if (req.regex.test(val)) {
+          req.el.innerHTML = "✅ " + req.el.textContent.substring(2);
+          req.el.classList.replace("text-danger", "text-success");
+        } else {
+          req.el.innerHTML = "❌ " + req.el.textContent.substring(2);
+          req.el.classList.replace("text-success", "text-danger");
+        }
+      });
+    });
+
+    const confirmInput = document.getElementById("confirm");
+    const matchMsg = document.getElementById("match-msg");
+    const checkMatch = () => {
+      if (confirmInput.value === "") {
+        matchMsg.textContent = "";
+      } else if (confirmInput.value === pwInput.value) {
+        matchMsg.textContent = "✅ Passwords match";
+        matchMsg.className = "small mt-1 text-success";
+      } else {
+        matchMsg.textContent = "❌ password doesn't Match";
+        matchMsg.className = "small mt-1 text-danger";
+      }
+    };
+    pwInput.addEventListener("input", checkMatch);
+    confirmInput.addEventListener("input", checkMatch);
+  });
+</script>
+{% endblock %}
+
+{% block submit_text %}Create Account{% endblock %}
+
+{% block extra_links %}
+<div class="text-center mt-4">
+  <span class="text-secondary small">Already have an account?</span>
+  <a href="{{ url_for('org_login') }}" class="text-decoration-none ms-1">Sign In</a>
+</div>
+{% endblock %}

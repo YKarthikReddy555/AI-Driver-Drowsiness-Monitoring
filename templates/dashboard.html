@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driver Safety Monitoring</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/static/icon-512.png">
+    <link rel="apple-touch-icon" href="/static/icon-512.png">
+    <meta name="theme-color" content="#198754">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js');
+        });
+      }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <style>
+      .chat-bubble a {
+        color: #60a5fa !important;
+        text-decoration: underline !important;
+        font-weight: bold;
+      }
+      .chat-bubble a:hover {
+        color: #93c5fd !important;
+        text-decoration: none !important;
+      }
+    </style>
+  </head>
+  <body class="theme-dark">
+    <nav
+      class="navbar navbar-expand-lg navbar-dark bg-black border-bottom border-secondary"
+    >
+      <div class="container-fluid px-4 d-flex flex-wrap align-items-center justify-content-between">
+        <div class="navbar-brand-container">
+          <div class="navbar-brand fw-semibold m-0 d-flex align-items-center">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" class="navbar-logo">
+            <span>AI Driver Safety</span>
+          </div>
+          {% if org_name == "Independent" %}
+          <span class="badge bg-info border text-dark fw-bold">Personal Mode</span>
+          {% elif org_name %}
+          <span class="badge bg-secondary border border-secondary text-light">Organisation: {{ org_name }}</span>
+          {% endif %}
+        </div>
+        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap py-2">
+          <button id="themeToggle" class="btn btn-outline-light btn-sm me-1" type="button" title="Toggle theme">
+            <span id="themeIcon">🌙</span>
+          </button>
+          <div class="dropdown me-1">
+            <button id="notifBtn" class="btn btn-outline-light btn-sm position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="fa-solid fa-bell"></i>
+              <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">
+                0
+              </span>
+            </button>
+            <div id="notifList" class="dropdown-menu dropdown-menu-end bg-black border-secondary p-0 shadow-lg" style="width: 300px; max-height: 400px; overflow-y: auto;">
+              <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                <span class="fw-bold small text-light ps-1">Notifications</span>
+                <button class="btn btn-link btn-sm text-secondary text-decoration-none p-0 pe-1" style="font-size: 11px;" onclick="clearNotifs()">Clear all</button>
+              </div>
+              <div id="notifItems" class="p-0">
+                <div class="p-3 text-center text-muted small">No notifications</div>
+              </div>
+            </div>
+          </div>
+          <a class="btn btn-outline-light btn-sm" href="{{ url_for('history') }}">History</a>
+          <button id="btnStart" class="btn btn-success btn-sm">Start Camera</button>
+          <button id="btnStop" class="btn btn-outline-danger btn-sm">Stop</button>
+          <form method="post" action="{{ url_for('logout') }}" class="m-0">
+            <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
+          </form>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container-fluid px-4 py-4">
+      <div class="row g-4">
+        <!-- Monitoring Panel -->
+        <div class="col-12 col-xl-8">
+          <div class="card bg-black border-secondary shadow-sm">
+            <div
+              class="card-header d-flex align-items-center justify-content-between border-secondary"
+            >
+              <div class="d-flex align-items-center gap-2">
+                <span class="dot" id="dotOverall"></span>
+                <span class="fw-semibold">Live Camera</span>
+              </div>
+              <div class="small text-secondary">
+                <span>Capture FPS: </span><span id="fpsCapture">-</span>
+                <span class="mx-2">|</span>
+                <span>Process FPS: </span><span id="fpsProcess">-</span>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="video-wrap" id="videoContainer">
+                <!-- Browser-side camera capture elements -->
+                <video id="webcam" autoplay playsinline style="display:none"></video>
+                <canvas id="captureCanvas" style="display:none"></canvas>
+                <canvas id="videoCanvas" class="w-100" style="background: #000; min-height: 300px; display: block;"></canvas>
+                <div id="overlayIdle" class="idle-overlay">
+                  <div class="idle-text">{% if driver_status == 'pending' %}Approval Pending{% else %}Camera is stopped{% endif %}</div>
+                  <div class="idle-subtext">
+                    {% if driver_status == 'pending' %}
+                    Your request is being reviewed. Use the chat below to interview.
+                    {% else %}
+                    Click <span class="fw-semibold">Start Camera</span> to begin monitoring
+                    {% endif %}
+                  </div>
+                </div>
+                <div id="overlayCritical" class="critical-overlay d-none">
+                  <div class="critical-text">CRITICAL ALERT</div>
+                  <div class="critical-subtext">Stop using phone now</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats & Alerts Panel -->
+        <div class="col-12 col-xl-4">
+          <div class="card bg-black border-secondary shadow-sm mb-4">
+            <div
+              class="card-header border-secondary d-flex align-items-center justify-content-between"
+            >
+              <span class="fw-semibold">Status</span>
+              <div class="form-check form-switch m-0">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                  id="voiceToggle"
+                  checked
+                />
+                <label
+                  class="form-check-label small text-secondary"
+                  for="voiceToggle"
+                  >Voice</label
+                >
+              </div>
+            </div>
+            <div class="card-body">
+              <div
+                class="d-flex align-items-center justify-content-between mb-3"
+              >
+                <div>
+                  <div class="text-secondary small">Overall</div>
+                  <div class="h4 m-0" id="overallText">-</div>
+                </div>
+                <span class="badge rounded-pill px-3 py-2" id="overallBadge"
+                  >-</span
+                >
+              </div>
+
+              <div class="status-row">
+                <div class="text-secondary small">Eyes closed duration</div>
+                <div class="fw-semibold"><span id="eyesTimer">0.0</span>s</div>
+              </div>
+              <div class="status-row mt-2">
+                <div class="text-secondary small">Phone usage duration</div>
+                <div class="fw-semibold"><span id="phoneTimer">0.0</span>s</div>
+              </div>
+
+              <hr class="border-secondary my-3" />
+
+              <div class="status-row">
+                <div>
+                  <div class="text-secondary small">Drowsiness</div>
+                  <div id="drowsyText" class="fw-semibold">-</div>
+                </div>
+                <span class="badge rounded-pill" id="drowsyBadge">-</span>
+              </div>
+
+              <div class="status-row mt-3">
+                <div>
+                  <div class="text-secondary small">Phone</div>
+                  <div id="phoneText" class="fw-semibold">-</div>
+                </div>
+                <span class="badge rounded-pill" id="phoneBadge">-</span>
+              </div>
+
+              <div class="mt-3 small text-secondary">
+                <div>EAR: <span id="earVal">-</span></div>
+                <div>Phone conf: <span id="phoneConfVal">-</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Speedometer Card -->
+          <div class="card bg-black border-secondary shadow-sm mb-4">
+            <div class="card-header border-secondary d-flex align-items-center justify-content-between">
+              <span class="fw-semibold">Vehicle Speed</span>
+              <div class="d-flex align-items-center gap-2">
+                <select id="speedMode" class="form-select form-select-sm bg-black text-light border-secondary" style="width: auto;">
+                  <option value="gps" selected>Real GPS</option>
+                  <option value="simulated">Simulated</option>
+                </select>
+                <span class="badge border border-secondary" id="speedStatusBadge">SAFE</span>
+              </div>
+            </div>
+            <div class="card-body text-center py-4">
+              <div id="speedometerText" class="display-4 fw-bold text-success mb-3" style="font-variant-numeric: tabular-nums; transition: color 0.3s ease;">
+                0 km/h
+              </div>
+              <div class="progress" style="height: 16px; background-color: rgba(255,255,255,0.1); border-radius: 8px;">
+                <div id="speedometerBar" class="progress-bar bg-success" role="progressbar" style="width: 0%; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="120"></div>
+              </div>
+              <div class="d-flex justify-content-between mt-2 small text-secondary fw-semibold">
+                <span>0</span>
+                <span>60</span>
+                <span>120+</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card bg-black border-secondary shadow-sm">
+            <div class="card-body">
+              <div class="text-secondary small mb-2">Legend</div>
+              <div class="d-flex flex-wrap gap-2">
+                <span
+                  class="badge bg-success-subtle text-success border border-success"
+                  >GREEN = Safe</span
+                >
+                <span
+                  class="badge bg-warning-subtle text-warning border border-warning"
+                  >ORANGE = Warning</span
+                >
+                <span
+                  class="badge bg-danger-subtle text-danger border border-danger"
+                  >RED = Danger</span
+                >
+              </div>
+              <div class="text-secondary small mt-3">
+                Tips: keep the tab active for the most responsive client-side
+                voice alerts.
+              </div>
+            </div>
+          </div>
+
+          {% if driver_status == 'active' %}
+          <div class="card bg-black border-success shadow-sm mt-0 mb-4">
+            <div class="card-header border-success bg-success-subtle py-2">
+              <span class="fw-bold text-success small text-uppercase"><i class="fas fa-id-card me-2"></i>Your Fleet</span>
+            </div>
+            <div class="card-body d-flex justify-content-between align-items-center py-3">
+              <div>
+                <div class="fw-bold fs-5 text-light">{{ org_name }}</div>
+                <div class="small text-secondary">Official Partner</div>
+              </div>
+              <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" 
+                      id="btnChatHired"
+                      data-org-id="{{ hired_org_id or 'null' }}"
+                      data-org-name="{{ org_name | e }}"
+                      onclick="const d = this.dataset; selectChatOrg(parseInt(d.orgId), d.orgName)">
+                <i class="fas fa-comments me-2"></i>Chat
+              </button>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if org_name == "Independent" %}
+          <div class="card bg-black border-secondary shadow-sm mt-0 mb-4">
+            <div class="card-header border-secondary fw-bold text-info">Partner with Organisations</div>
+            <div class="card-body">
+              <p class="small text-secondary mb-3">Apply to multiple organisations to share your telemetry and interview with fleet managers.</p>
+              <div class="d-flex gap-2">
+                <select class="form-select form-select-sm bg-black text-light border-secondary" id="applyOrgId">
+                  <option value="">-- Choose Organisation --</option>
+                  {% for org in orgs %}
+                  <option value="{{ org.id }}">{{ org.name }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-info" id="btnApplyOrg">Apply</button>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="card bg-black border-secondary shadow-sm mt-4">
+            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
+              <span>My Applications</span>
+              <span class="badge border border-secondary text-secondary" id="appCount">0</span>
+            </div>
+            <div class="card-body p-0">
+              <ul class="list-group list-group-flush" id="applicationList">
+                <li class="list-group-item bg-dark text-secondary border-secondary small text-center py-3">Loading applications...</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Driver Chat (Always in DOM, hidden by default) -->
+          <div class="card bg-black border-secondary shadow-sm mt-4" id="driverChatCard" style="display: none;">
+            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+              <div>
+                <span class="fw-bold me-2" id="chatOrgTitle">Interview Chat</span>
+                <span class="text-warning" style="font-size: 0.65rem;"><i class="fas fa-lock me-1"></i> End-to-end encrypted</span>
+              </div>
+              <button class="btn btn-sm btn-link text-secondary p-0 border-0" onclick="closeDriverChat()" title="Close Chat">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div class="card-body p-0">
+               <div id="driverChatBox" class="chat-box whatsapp-chat mb-0" style="height: 350px;">
+                 <div class="text-center text-muted p-4">Select an organisation from the list above to start chatting</div>
+               </div>
+            </div>
+            <div class="card-footer border-secondary bg-black">
+              <div class="d-flex gap-2 flex-wrap" id="chatInputArea">
+                <input type="file" id="driverImageInput" accept="*" style="display: none;">
+                <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('driverImageInput').click()" title="Send File/Document">
+                  <i class="fas fa-paperclip"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" id="btnDriverRecord" title="Record Voice">
+                  <i class="fas fa-microphone"></i>
+                </button>
+                <input type="text" id="driverChatInput" class="form-control form-control-sm bg-transparent border-secondary" placeholder="Type a message...">
+                <button class="btn btn-sm btn-primary" id="btnDriverSend">Send</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Real-time Event Log Row -->
+      <div class="row mt-4">
+        <div class="col-12">
+          <div class="card bg-black border-secondary shadow-sm">
+            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+              <span class="fw-bold"><i class="fas fa-list-ul me-2 text-info"></i>Real-time Event Log</span>
+              <span class="badge bg-dark border border-secondary text-secondary small">Last 10 events</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-themed table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                  <thead>
+                    <tr class="text-secondary">
+                      <th class="ps-3">ID</th>
+                      <th>Timestamp</th>
+                      <th>Type</th>
+                      <th>Severity</th>
+                      <th class="text-end">Duration (s)</th>
+                      <th class="pe-3">Message</th>
+                    </tr>
+                  </thead>
+                  <tbody id="eventLogBody">
+                    <tr>
+                      <td colspan="6" class="text-center py-4 text-secondary">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        Waiting for live data...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="toast show align-items-center text-white bg-{{ 'success' if category == 'success' else 'danger' if category == 'danger' else 'primary' if category == 'info' else category }} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="2000">
+              <div class="d-flex">
+                <div class="toast-body">
+                  {{ message }}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <!-- Floating Support Icon -->
+    <div class="position-fixed bottom-0 end-0 m-4" style="z-index: 1050;">
+      <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" 
+              style="width: 60px; height: 60px;" 
+              data-bs-toggle="modal" 
+              data-bs-target="#supportModal" 
+              title="Customer Support">
+        <i class="fas fa-headset fs-4"></i>
+      </button>
+    </div>
+
+    <!-- Support Chat Modal -->
+    <div class="modal fade" id="supportModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+          <div class="modal-header border-secondary">
+            <div class="d-flex flex-column">
+              <h5 class="modal-title"><i class="fas fa-headset me-2 text-primary"></i>Customer Support</h5>
+              <span class="text-warning" style="font-size: 0.65rem;"><i class="fas fa-lock me-1"></i> End-to-end encrypted</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0">
+            <div id="supportChatBox" class="chat-box p-3" style="height: 350px; overflow-y: auto;">
+              <div class="text-center text-muted py-5">Connecting to admin...</div>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <div class="d-flex gap-2 w-100">
+              <input type="file" id="supportImageInput" accept="*" style="display: none;">
+              <button class="btn btn-outline-secondary" onclick="document.getElementById('supportImageInput').click()" title="Attach files/documents">
+                <i class="fas fa-paperclip"></i>
+              </button>
+              <button class="btn btn-outline-secondary" id="btnSupportRecord">
+                <i class="fas fa-microphone"></i>
+              </button>
+              <input type="text" id="supportChatInput" class="form-control bg-black text-white border-secondary" placeholder="Message admin...">
+              <button class="btn btn-primary" id="btnSupportSend">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Support Chat Logic
+      let supportPollingInterval = null;
+      let lastSupportMsgCount = 0;
+
+      document.getElementById('supportModal').addEventListener('shown.bs.modal', () => {
+          fetchSupportMessages();
+          supportPollingInterval = setInterval(fetchSupportMessages, 3000);
+      });
+
+      function escapeHTML(str) {
+          const p = document.createElement('p');
+          p.textContent = str;
+          return p.innerHTML;
+      }
+
+      function getFileIcon(filename) {
+          const ext = filename.split('.').pop().toLowerCase();
+          if (ext === 'pdf') return 'fa-file-pdf text-danger';
+          if (['doc', 'docx'].includes(ext)) return 'fa-file-word text-primary';
+          if (['xls', 'xlsx'].includes(ext)) return 'fa-file-excel text-success';
+          if (['ppt', 'pptx'].includes(ext)) return 'fa-file-powerpoint text-warning';
+          if (['zip', 'rar', '7z'].includes(ext)) return 'fa-file-archive text-warning';
+          return 'fa-file-alt text-secondary';
+      }
+
+      function linkify(text) {
+          const escaped = escapeHTML(text);
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          return escaped.replace(urlRegex, (url) => {
+              return `<a href="${url}" target="_blank" style="color: #60a5fa !important; text-decoration: underline !important; font-weight: bold;">${url}</a>`;
+          });
+      }
+
+      async function fetchSupportMessages() {
+          const res = await fetch(`/api/chat/messages?user_role=admin&user_id=1`);
+          if (!res.ok) return;
+          const msgs = await res.json();
+          
+          if (msgs.length > lastSupportMsgCount && lastSupportMsgCount !== 0) {
+              const lastMsg = msgs[msgs.length - 1];
+              if (lastMsg.sender_type !== 'driver' && typeof triggerNotification === 'function') {
+                  triggerNotification('Support Message from Admin', lastMsg.message_type === 'video' ? '[Video Recorded]' : lastMsg.message);
+              }
+          }
+          if (msgs.length === lastSupportMsgCount && lastSupportMsgCount !== 0) return;
+          lastSupportMsgCount = msgs.length;
+
+          const box = document.getElementById('supportChatBox');
+          box.innerHTML = '<div class="text-center my-2"><span class="encryption-badge"><i class="fas fa-lock me-1"></i> Messages are end-to-end encrypted.</span></div>';
+          
+          let lastDateStr = null;
+          const today = new Date().toDateString();
+          const yesterday = new Date(Date.now() - 86400000).toDateString();
+          msgs.forEach(m => {
+              const msgDate = new Date(m.timestamp);
+              const dateStr = msgDate.toDateString();
+              if (dateStr !== lastDateStr) {
+                  let displayDate = (dateStr === today) ? 'Today' : (dateStr === yesterday ? 'Yesterday' : dateStr);
+                  const dateDiv = document.createElement('div');
+                  dateDiv.className = 'date-divider text-center my-3';
+                  dateDiv.innerHTML = `<span>${displayDate}</span>`;
+                  box.appendChild(dateDiv);
+                  lastDateStr = dateStr;
+              }
+              const div = document.createElement('div');
+              const isMe = m.sender_type === 'driver';
+              div.className = `chat-row ${isMe ? 'me' : 'not-me'}`;
+              
+              const time = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              let content = linkify(m.message);
+              if (m.message_type === 'image') content = `<img src="${m.message}" onclick="window.open(this.src)" style="max-width: 100%; border-radius: 8px; cursor: pointer;">`;
+              else if (m.message_type === 'voice') content = `<audio src="${m.message}" controls style="max-width: 100%;"></audio>`;
+              else if (m.message_type === 'video') content = `<video src="${m.message}" controls preload="metadata" style="max-width: 100%; border-radius: 8px;"></video>`;
+              else if (m.message_type === 'document') {
+                  const filename = m.message.split('/').pop().substring(33); // Skip UUID hex + underscore
+                  content = `<div class="d-flex align-items-center p-2 bg-black-50 rounded border border-secondary">
+                               <i class="fas ${getFileIcon(filename)} fs-4 me-3"></i>
+                               <div class="flex-grow-1 overflow-hidden">
+                                 <div class="small fw-bold text-truncate" title="${filename}">${filename}</div>
+                                 <a href="${m.message}" target="_blank" class="text-primary small text-decoration-none">Download <i class="fas fa-download ms-1"></i></a>
+                               </div>
+                             </div>`;
+              }
+              
+              div.innerHTML = `
+                  <div class="chat-bubble ${isMe ? 'sender' : 'receiver'}">
+                      <div class="chat-label fw-bold mb-1">${isMe ? 'You' : 'Admin'}</div>
+                      <div>${content}</div>
+                      <div class="text-end mt-1" style="font-size: 0.65rem; opacity: 0.7;">
+                          ${time}
+                          ${isMe ? (m.is_read ? '<i class="fas fa-check-double text-info ms-1"></i>' : '<i class="fas fa-check text-white ms-1"></i>') : ''}
+                      </div>
+                  </div>
+              `;
+              box.appendChild(div);
+          });
+          box.scrollTop = box.scrollHeight;
+
+          const unreadMsgs = msgs.filter(m => m.sender_type !== 'driver' && m.is_read === 0);
+          if (unreadMsgs.length > 0 && !document.hidden && document.getElementById('supportModal').classList.contains('show')) {
+              fetch('/api/chat/read', {
+                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({ sender_type: unreadMsgs[0].sender_type, sender_id: unreadMsgs[0].sender_id })
+              });
+          }
+      }
+
+      async function sendSupportMessage(msg, type = 'text') {
+          try {
+              const res = await fetch('/api/chat/send', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                      receiver_id: 1,
+                      receiver_type: 'admin',
+                      message: msg,
+                      message_type: type
+                  })
+              });
+              if (!res.ok) throw new Error("Send failed");
+              fetchSupportMessages();
+          } catch(e) {
+              console.error("Support send error:", e);
+              alert("Failed to send support message.");
+          }
+      }
+
+      document.getElementById('btnSupportSend').addEventListener('click', async () => {
+          const input = document.getElementById('supportChatInput');
+          if (!input.value.trim()) return;
+          await sendSupportMessage(input.value.trim());
+          input.value = '';
+      });
+
+      document.getElementById('supportChatInput').addEventListener('keypress', e => {
+          if (e.key === 'Enter') document.getElementById('btnSupportSend').click();
+      });
+
+      // Files & Voice
+      document.getElementById('supportImageInput').addEventListener('change', async e => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+              const res = await fetch('/api/chat/upload', {method: 'POST', body: formData});
+              const data = await res.json();
+              if (data.ok) {
+                  let type = 'document';
+                  const ext = file.name.split('.').pop().toLowerCase();
+                  if (['png','jpg','jpeg','gif','webp','heic'].includes(ext)) type = 'image';
+                  else if (['webm','mp4','mov','avi','mkv'].includes(ext)) type = 'video';
+                  else if (['wav','mp3','ogg'].includes(ext)) type = 'voice';
+                  
+                  sendSupportMessage(data.filepath, type);
+              }
+          } catch(e) {
+              console.error("Support upload error:", e);
+              alert("Failed to upload file. Please try again.");
+          }
+          e.target.value = ''; // Reset input
+      });
+
+      let supportMediaRecorder;
+      let supportAudioChunks = [];
+      document.getElementById('btnSupportRecord').addEventListener('click', async () => {
+          const btn = document.getElementById('btnSupportRecord');
+          if (!supportMediaRecorder || supportMediaRecorder.state === 'inactive') {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              supportMediaRecorder = new MediaRecorder(stream);
+              supportAudioChunks = [];
+              supportMediaRecorder.ondataavailable = e => supportAudioChunks.push(e.data);
+              supportMediaRecorder.onstop = async () => {
+                  const blob = new Blob(supportAudioChunks, { type: 'audio/webm' });
+                  const formData = new FormData();
+                  formData.append('file', new File([blob], "voice.webm", { type: "audio/webm" }));
+                  const res = await fetch('/api/chat/upload', {method: 'POST', body: formData});
+                  const data = await res.json();
+                  if (data.ok) sendSupportMessage(data.filepath, 'voice');
+                  btn.innerHTML = '<i class="fas fa-microphone"></i>';
+                  btn.classList.replace('btn-danger', 'btn-outline-secondary');
+              };
+              supportMediaRecorder.start();
+              btn.innerHTML = '<i class="fas fa-stop"></i>';
+              btn.classList.replace('btn-outline-secondary', 'btn-danger');
+          } else {
+              supportMediaRecorder.stop();
+          }
+      });
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ range(1, 100000) | random }}"></script>
+    <script>
+      // Initialize hired org chat if exists
+      document.addEventListener('DOMContentLoaded', () => {
+          const hiredId = "{{ hired_org_id or '' }}";
+          const hiredName = "{{ org_name | e }}";
+          if (hiredId && hiredName && hiredName !== 'Independent') {
+              setTimeout(() => {
+                  if (typeof selectChatOrg === 'function') {
+                      selectChatOrg(parseInt(hiredId), hiredName);
+                  }
+              }, 1000);
+          }
+      });
+    </script>
+  </body>
+</html>

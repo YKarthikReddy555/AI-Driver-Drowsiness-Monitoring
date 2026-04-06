@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Organisation Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/static/icon-512.png">
+    <link rel="apple-touch-icon" href="/static/icon-512.png">
+    <meta name="theme-color" content="#198754">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js');
+        });
+      }
+    </script>
+    <style>
+      .chat-bubble a {
+        color: #0d6efd !important;
+        text-decoration: underline !important;
+        font-weight: bold;
+      }
+      .chat-bubble a:hover {
+        color: #0a58ca !important;
+        text-decoration: none !important;
+      }
+    </style>
+  </head>
+  <body class="theme-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary">
+      <div class="container-fluid px-4 d-flex flex-wrap align-items-center justify-content-between">
+        <div class="navbar-brand-container">
+          <div class="navbar-brand fw-bold m-0 d-flex align-items-center">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" class="navbar-logo">
+            <span>{{ org_name }} - Organisation Portal</span>
+          </div>
+          <span class="text-secondary small ms-lg-3">Your Org Code: <code class="fs-6 text-white bg-secondary px-2 py-1 rounded" id="orgCodeDisplay">-</code></span>
+        </div>
+        <div class="ms-auto d-flex align-items-center gap-3 py-2">
+          <button id="themeToggle" class="btn btn-outline-light btn-sm" type="button" title="Toggle theme">
+            <span id="themeIcon">🌙</span>
+          </button>
+          <form method="post" action="{{ url_for('logout') }}" class="m-0">
+            <button class="btn btn-outline-danger btn-sm">Logout</button>
+          </form>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid px-4 py-4">
+      <div class="row g-4">
+        
+        <!-- Driver Management -->
+        <div class="col-lg-4">
+          <div class="card bg-black border-secondary h-100">
+            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
+              <span>Active Drivers</span>
+              <div class="input-group input-group-sm w-50">
+                <span class="input-group-text bg-transparent border-secondary text-secondary"><i class="fas fa-search"></i></span>
+                <input type="text" id="activeSearch" class="form-control bg-transparent border-secondary text-white" placeholder="Search...">
+              </div>
+            </div>
+            <div class="card-body p-0 scrollable-list">
+              <ul class="list-group list-group-flush" id="driverList">
+                <li class="list-group-item text-light border-secondary">Loading...</li>
+              </ul>
+            </div>
+            <div class="card-header border-secondary fw-bold text-warning border-top d-flex justify-content-between align-items-center">
+              <span>Pending Requests</span>
+              <div class="input-group input-group-sm w-50">
+                <span class="input-group-text bg-transparent border-secondary text-secondary"><i class="fas fa-search"></i></span>
+                <input type="text" id="pendingSearch" class="form-control bg-transparent border-secondary text-white" placeholder="Search...">
+              </div>
+            </div>
+            <div class="card-body p-0 scrollable-list">
+              <ul class="list-group list-group-flush" id="pendingList">
+                <li class="list-group-item text-secondary border-secondary small">Loading...</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Monitoring & Chat -->
+        <div class="col-lg-8">
+          <div class="card bg-black border-secondary mb-4">
+            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
+              <span>Live Monitor</span>
+              <div class="d-flex align-items-center gap-2">
+                <span id="selectedDriverName" class="text-info">Select a driver</span>
+                <button id="btnDeselectDriver" class="btn btn-sm btn-outline-secondary py-0 px-2 border-0" style="display: none;" title="Deselect Driver">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+            <div class="card-body" id="monitorPanel" style="display: none;">
+              <div class="row text-center g-3">
+                <div class="col-4">
+                  <div class="p-3 border border-secondary rounded bg-black">
+                    <div class="small text-secondary mb-1">Speed</div>
+                    <div class="h3 fw-bold m-0" id="liveSpeed">-</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="p-3 border border-secondary rounded bg-black">
+                    <div class="small text-secondary mb-1">Drowsiness</div>
+                    <div class="h5 fw-bold m-0 mt-2" id="liveDrowsy">-</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="p-3 border border-secondary rounded bg-black">
+                    <div class="small text-secondary mb-1">Phone Usage</div>
+                    <div class="h5 fw-bold m-0 mt-2" id="livePhone">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat -->
+          <div class="card bg-black border-secondary">
+            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+              <span class="fw-bold">Direct Chat</span>
+              <div class="d-flex align-items-center gap-2">
+                {% if can_clear %}
+                <button class="btn btn-link btn-sm text-secondary p-0 text-decoration-none" id="btnClearChat" style="display: none;">
+                  <i class="fas fa-eraser me-1"></i> Clear
+                </button>
+                {% endif %}
+                <span class="text-warning" style="font-size: 0.65rem;"><i class="fas fa-lock me-1"></i> End-to-end encrypted</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="chatBox" class="chat-box whatsapp-chat mb-3">
+                <div class="text-center my-2">
+                   <span class="badge bg-dark border border-secondary text-warning" style="font-size: 0.7rem;">
+                     <i class="fas fa-lock me-1"></i> Messages are end-to-end encrypted.
+                   </span>
+                </div>
+                <div class="text-center text-muted small p-4">Select a driver to chat</div>
+              </div>
+              <div class="d-flex gap-2 flex-wrap" id="chatInputArea" style="display: none !important;">
+                <input type="file" id="imageInput" accept="*" style="display: none;">
+                <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('imageInput').click()" title="Send File/Document">
+                  <i class="fas fa-paperclip"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" id="btnRecord" title="Record Voice">
+                  <i class="fas fa-microphone"></i>
+                </button>
+                <input type="text" id="chatInput" class="form-control bg-transparent border-secondary" placeholder="Type a message...">
+                <button class="btn btn-primary" id="btnSend">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    <script>
+      let activeDriverId = null;
+      let lastChatMsgCount = 0;
+      let allDrivers = [];
+      let allPending = [];
+
+      function getFileIcon(filename) {
+          const ext = filename.split('.').pop().toLowerCase();
+          if (ext === 'pdf') return 'fa-file-pdf text-danger';
+          if (['doc', 'docx'].includes(ext)) return 'fa-file-word text-primary';
+          if (['xls', 'xlsx'].includes(ext)) return 'fa-file-excel text-success';
+          if (['ppt', 'pptx'].includes(ext)) return 'fa-file-powerpoint text-warning';
+          if (['zip', 'rar', '7z'].includes(ext)) return 'fa-file-archive text-warning';
+          return 'fa-file-alt text-secondary';
+      }
+
+      async function fetchOrgData() {
+        try {
+            const res = await fetch('/api/org/data');
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            document.getElementById('orgCodeDisplay').innerText = data.org_code || '-';
+            allDrivers = data.drivers || [];
+            allPending = data.pending || [];
+            
+            renderDriverLists();
+            setupEventListeners();
+        } catch (e) {
+            console.error("fetchOrgData failed:", e);
+        }
+      }
+
+      function renderDriverLists() {
+        const activeQuery = document.getElementById('activeSearch').value.toLowerCase();
+        const pendingQuery = document.getElementById('pendingSearch').value.toLowerCase();
+        
+        const list = document.getElementById('driverList');
+        const pendingList = document.getElementById('pendingList');
+        
+        list.innerHTML = '';
+        pendingList.innerHTML = '';
+        
+        const filteredDrivers = allDrivers.filter(d => 
+            d.name.toLowerCase().includes(activeQuery) || d.email.toLowerCase().includes(activeQuery)
+        );
+        
+        if(filteredDrivers.length === 0) {
+            list.innerHTML = `<li class="list-group-item bg-dark text-secondary border-secondary small text-center py-3">${allDrivers.length > 0 ? 'No matches' : 'No active drivers'}</li>`;
+        } else {
+            filteredDrivers.forEach(d => {
+              const li = document.createElement('li');
+              li.className = `list-group-item bg-dark text-light border-secondary d-flex justify-content-between align-items-center driver-item ${d.id === activeDriverId ? 'bg-secondary' : ''}`;
+              li.style.cursor = 'pointer';
+              li.innerHTML = `
+                <div>
+                    <strong>${d.name}</strong><br>
+                    <small class="text-secondary">${d.email}</small>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary history-btn" data-id="${d.id}">History</button>
+                    <button class="btn btn-sm btn-outline-danger remove-btn" data-id="${d.id}">Remove</button>
+                </div>
+              `;
+              li.addEventListener('click', (e) => {
+                if(!e.target.closest('.btn-group')) selectDriver(d.id, d.name);
+              });
+              list.appendChild(li);
+            });
+        }
+
+        const filteredPending = allPending.filter(d => 
+            d.name.toLowerCase().includes(pendingQuery) || d.email.toLowerCase().includes(pendingQuery)
+        );
+
+        if(filteredPending.length === 0) {
+            pendingList.innerHTML = `<li class="list-group-item bg-dark text-secondary border-secondary small text-center py-3">${allPending.length > 0 ? 'No matches' : 'No pending requests'}</li>`;
+        } else {
+            filteredPending.forEach(d => {
+              const li = document.createElement('li');
+              li.className = `list-group-item bg-dark text-light border-secondary d-flex justify-content-between align-items-center`;
+              li.innerHTML = `
+                <div>
+                    <strong>${d.name}</strong><br>
+                    <small class="text-secondary">${d.email}</small>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary history-btn" data-id="${d.id}">History</button>
+                    <button class="btn btn-sm btn-outline-info chat-pending-btn" data-id="${d.id}" data-name="${d.name}">Chat</button>
+                    <button class="btn btn-sm btn-success accept-btn" data-id="${d.id}">Accept</button>
+                    <button class="btn btn-sm btn-danger reject-btn" data-id="${d.id}">Reject</button>
+                </div>
+              `;
+              pendingList.appendChild(li);
+            });
+        }
+        setupEventListeners();
+      }
+
+      document.getElementById('activeSearch').addEventListener('input', renderDriverLists);
+      document.getElementById('pendingSearch').addEventListener('input', renderDriverLists);
+
+      function setupEventListeners() {
+        document.querySelectorAll('.history-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.location.href = `/org/driver/${btn.dataset.id}/history`;
+          });
+        });
+
+        document.querySelectorAll('.remove-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if(!confirm("Remove active driver?")) return;
+            await fetch(`/api/org/driver/${btn.dataset.id}/remove`, {method: 'POST'});
+            if(activeDriverId == btn.dataset.id) selectDriver(null, null);
+            fetchOrgData();
+          });
+        });
+        
+        document.querySelectorAll('.accept-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            await fetch(`/api/org/driver/${btn.dataset.id}/accept`, {method: 'POST'});
+            fetchOrgData();
+          });
+        });
+
+        document.querySelectorAll('.reject-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if(!confirm("Reject this driver request?")) return;
+            await fetch(`/api/org/driver/${btn.dataset.id}/remove`, {method: 'POST'});
+            fetchOrgData();
+          });
+        });
+
+        document.querySelectorAll('.chat-pending-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectDriver(parseInt(btn.dataset.id), btn.dataset.name, true);
+          });
+        });
+      }
+
+      function selectDriver(id, name, isPending = false) {
+        activeDriverId = id;
+        const monitor = document.getElementById('monitorPanel');
+        const chatInput = document.getElementById('chatInputArea');
+        const chatTitle = document.querySelector('#chatInputArea').parentElement.previousElementSibling.querySelector('.fw-bold');
+        const clearBtn = document.getElementById('btnClearChat');
+        const deselectBtn = document.getElementById('btnDeselectDriver');
+        
+        if(id) {
+            document.getElementById('selectedDriverName').innerText = name + (isPending ? ' (PENDING)' : '');
+            
+            if(isPending) {
+                monitor.style.display = 'none';
+                chatTitle.innerText = "Interview Chat (Pending Approval)";
+            } else {
+                monitor.style.display = 'block';
+                chatTitle.innerText = "Direct Chat";
+            }
+            chatInput.style.setProperty('display', 'flex', 'important');
+            if(clearBtn) clearBtn.style.display = 'inline-block';
+            if(deselectBtn) deselectBtn.style.display = 'inline-block';
+            document.getElementById('chatBox').innerHTML = 'Loading chat...';
+            lastChatMsgCount = 0;
+            fetchChat();
+        } else {
+            document.getElementById('selectedDriverName').innerText = 'Select a driver';
+            monitor.style.display = 'none';
+            chatInput.style.setProperty('display', 'none', 'important');
+            if(clearBtn) clearBtn.style.display = 'none';
+            if(deselectBtn) deselectBtn.style.display = 'none';
+            document.getElementById('chatBox').innerHTML = '<div class="text-center text-muted small p-4">Select a driver to chat</div>';
+        }
+        fetchOrgData();
+      }
+
+      setInterval(async () => {
+        if(!activeDriverId) return;
+        try {
+            const res = await fetch(`/api/org/driver_status/${activeDriverId}`);
+            if(res.ok) {
+                const s = await res.json();
+                const speedEl = document.getElementById('liveSpeed');
+                if(s.timestamp) {
+                    const diff = Date.now()/1000 - s.timestamp;
+                    if(diff > 10) {
+                        speedEl.innerText = "OFFLINE";
+                        speedEl.className = "h5 fw-bold m-0 mt-2 text-secondary";
+                    } else {
+                        speedEl.innerText = (s.speed || 0) + ' km/h';
+                        speedEl.className = "h3 fw-bold m-0 text-success";
+                        document.getElementById('liveDrowsy').innerText = s.drowsiness || 'ALERT';
+                        document.getElementById('livePhone').innerText = s.phone || 'CLEAR';
+                    }
+                } else {
+                    speedEl.innerText = "WAITING...";
+                }
+            }
+        } catch(e) {}
+        fetchChat();
+      }, 2000);
+
+      async function fetchChat() {
+          if(!activeDriverId) return;
+          const res = await fetch(`/api/chat/messages?driver_id=${activeDriverId}`);
+          if(!res.ok) return;
+          const msgs = await res.json();
+
+          function escapeHTML(str) {
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+          }
+
+          function linkify(text) {
+            const escaped = escapeHTML(text);
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return escaped.replace(urlRegex, (url) => {
+              return `<a href="${url}" target="_blank" style="color: inherit; text-decoration: underline;">${url}</a>`;
+            });
+          }
+          if (msgs.length > lastChatMsgCount && lastChatMsgCount !== 0) {
+              const lastMsg = msgs[msgs.length - 1];
+              if (lastMsg.sender_type !== 'org' && typeof triggerNotification === 'function') {
+                  triggerNotification('Message from Driver', lastMsg.message_type === 'video' ? '[Video Recorded]' : lastMsg.message);
+              }
+          }
+          if (msgs.length === lastChatMsgCount && lastChatMsgCount !== 0) return;
+          lastChatMsgCount = msgs.length;
+          
+          const box = document.getElementById('chatBox');
+          box.innerHTML = '<div class="text-center my-2"><span class="badge bg-dark border border-secondary text-warning" style="font-size: 0.7rem;"><i class="fas fa-lock me-1"></i> Messages are end-to-end encrypted.</span></div>';
+          
+          let lastDateStr = null;
+          const today = new Date().toDateString();
+          const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+          msgs.forEach(m => {
+              const d = new Date(m.timestamp);
+              const dateStr = d.toDateString();
+              if (dateStr !== lastDateStr) {
+                  let displayDate = (dateStr === today) ? 'Today' : (dateStr === yesterday ? 'Yesterday' : dateStr);
+                  const dateDiv = document.createElement('div');
+                  dateDiv.className = 'date-divider';
+                  dateDiv.innerHTML = `<span>${displayDate}</span>`;
+                  box.appendChild(dateDiv);
+                  lastDateStr = dateStr;
+              }
+              const div = document.createElement('div');
+              const isMe = m.sender_type === 'org';
+              div.className = `chat-row ${isMe ? 'me' : 'not-me'}`;
+              
+              const time = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              let content = linkify(m.message);
+              if (m.message_type === 'image') content = `<img src="${m.message}" alt="Image" onclick="window.open(this.src)" style="max-width: 100%; border-radius: 8px; cursor: pointer;">`;
+              else if (m.message_type === 'voice') content = `<audio src="${m.message}" controls style="max-width: 100%;"></audio>`;
+              else if (m.message_type === 'video') content = `<video src="${m.message}" controls preload="metadata" style="max-width: 100%; border-radius: 8px;"></video>`;
+              else if (m.message_type === 'document') {
+                  const filename = m.message.split('/').pop().substring(33);
+                  content = `<div class="d-flex align-items-center p-2 bg-black-50 rounded border border-secondary shadow-sm">
+                               <i class="fas ${getFileIcon(filename)} fs-4 me-3"></i>
+                               <div class="flex-grow-1 overflow-hidden">
+                                 <div class="small fw-bold text-truncate" title="${filename}">${filename}</div>
+                                 <a href="${m.message}" target="_blank" class="text-primary small text-decoration-none">Download <i class="fas fa-download ms-1"></i></a>
+                               </div>
+                             </div>`;
+              }
+              
+              const ticks = m.is_read ? '<i class="fas fa-check-double text-info"></i>' : '<i class="fas fa-check text-white"></i>';
+              
+              div.innerHTML = `
+                  <div class="chat-bubble ${isMe ? 'sender' : 'receiver'}">
+                      <div class="chat-label fw-bold mb-1">${isMe ? 'You' : 'Driver'}</div>
+                      <div>${content}</div>
+                      <div class="text-end mt-1" style="font-size: 0.65rem; opacity: 0.7;">
+                          ${time}
+                          ${isMe ? `<span class="ms-1">${ticks}</span>` : ''}
+                      </div>
+                  </div>
+              `;
+              box.appendChild(div);
+          });
+          box.scrollTop = box.scrollHeight;
+
+          const unreadMsgs = msgs.filter(m => m.sender_type !== 'org' && m.is_read === 0);
+          if (unreadMsgs.length > 0 && !document.hidden) {
+              fetch('/api/chat/read', {
+                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({ sender_type: unreadMsgs[0].sender_type, sender_id: unreadMsgs[0].sender_id })
+              });
+          }
+      }
+
+      async function uploadFile(file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+              const res = await fetch('/api/chat/upload', {method: 'POST', body: formData});
+              if (!res.ok) throw new Error("Upload failed");
+              return await res.json();
+          } catch(e) {
+              console.error("Upload error:", e);
+              alert("Failed to upload file. Please check your internet connection.");
+              return {ok: false};
+          }
+      }
+
+      let mediaRecorder;
+      let audioChunks = [];
+      document.getElementById('btnRecord').addEventListener('click', async () => {
+          const btn = document.getElementById('btnRecord');
+          if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              mediaRecorder = new MediaRecorder(stream);
+              audioChunks = [];
+              mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+              mediaRecorder.onstop = async () => {
+                  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                  const uploadRes = await uploadFile(new File([blob], "voice.webm", { type: "audio/webm" }));
+                  if (uploadRes.ok) await sendChatMessage(uploadRes.filepath, 'voice');
+                  btn.innerHTML = '<i class="fas fa-microphone"></i>';
+                  btn.classList.replace('btn-danger', 'btn-outline-secondary');
+              };
+              mediaRecorder.start();
+              btn.innerHTML = '<i class="fas fa-stop"></i>';
+              btn.classList.replace('btn-outline-secondary', 'btn-danger');
+          } else {
+              mediaRecorder.stop();
+          }
+      });
+
+      document.getElementById('imageInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const uploadRes = await uploadFile(file);
+          if (uploadRes.ok) {
+              let type = 'document';
+              const ext = file.name.split('.').pop().toLowerCase();
+              if (['png','jpg','jpeg','gif','webp','heic'].includes(ext)) type = 'image';
+              else if (['webm','mp4','mov','avi','mkv'].includes(ext)) type = 'video';
+              else if (['wav','mp3','ogg'].includes(ext)) type = 'voice';
+              await sendChatMessage(uploadRes.filepath, type);
+          }
+          e.target.value = '';
+      });
+
+      async function sendChatMessage(msg, type = 'text') {
+          if (!activeDriverId) return;
+          try {
+              const res = await fetch('/api/chat/send', {
+                  method: 'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({
+                      receiver_id: activeDriverId, 
+                      receiver_type: 'driver',
+                      message: msg, 
+                      message_type: type
+                  })
+              });
+              if (!res.ok) throw new Error("Send failed");
+              fetchChat();
+          } catch(e) {
+              console.error("Send error:", e);
+              alert("Failed to send message.");
+          }
+      }
+
+      document.getElementById('btnSend').addEventListener('click', async () => {
+          const input = document.getElementById('chatInput');
+          const msg = input.value.trim();
+          if(!msg || !activeDriverId) return;
+          await sendChatMessage(msg, 'text');
+          input.value = '';
+      });
+
+      document.getElementById('btnClearChat')?.addEventListener('click', async () => {
+          if(!activeDriverId) return;
+          if(!confirm("Clear all chat messages?")) return;
+          const res = await fetch(`/api/org/driver/${activeDriverId}/clear_chat`, {method: 'POST'});
+          if(res.ok) fetchChat();
+      });
+
+      document.getElementById('chatInput').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') document.getElementById('btnSend').click();
+      });
+
+      document.getElementById('btnDeselectDriver')?.addEventListener('click', () => {
+          selectDriver(null, null);
+      });
+
+      fetchOrgData();
+    </script>
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="toast show align-items-center text-white bg-{{ 'success' if category == 'success' else 'danger' if category == 'danger' else 'primary' if category == 'info' else category }} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="2000">
+              <div class="d-flex">
+                <div class="toast-body">
+                  {{ message }}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+    <!-- Floating Support Icon -->
+    <div class="position-fixed bottom-0 end-0 m-4" style="z-index: 1050;">
+      <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" 
+              style="width: 60px; height: 60px;" 
+              data-bs-toggle="modal" 
+              data-bs-target="#supportModal" 
+              title="Customer Support">
+        <i class="fas fa-headset fs-4"></i>
+      </button>
+    </div>
+
+    <!-- Support Chat Modal -->
+    <div class="modal fade" id="supportModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+          <div class="modal-header border-secondary">
+            <div class="d-flex flex-column">
+              <h5 class="modal-title"><i class="fas fa-headset me-2 text-primary"></i>Customer Support</h5>
+              <span class="text-warning" style="font-size: 0.65rem;"><i class="fas fa-lock me-1"></i> End-to-end encrypted</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0">
+            <div id="supportChatBox" class="chat-box p-3" style="height: 350px; overflow-y: auto;">
+              <div class="text-center text-muted py-5">Connecting to admin...</div>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <div class="d-flex gap-2 w-100">
+              <input type="file" id="supportImageInput" accept="*" style="display: none;">
+              <button class="btn btn-outline-secondary" onclick="document.getElementById('supportImageInput').click()" title="Attach files/documents">
+                <i class="fas fa-paperclip"></i>
+              </button>
+              <button class="btn btn-outline-secondary" id="btnSupportRecord">
+                <i class="fas fa-microphone"></i>
+              </button>
+              <input type="text" id="supportChatInput" class="form-control bg-black text-white border-secondary" placeholder="Message admin...">
+              <button class="btn btn-primary" id="btnSupportSend">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Support Chat Logic
+      let supportPollingInterval = null;
+      let lastSupportMsgCount = 0;
+
+      document.getElementById('supportModal').addEventListener('shown.bs.modal', () => {
+          fetchSupportMessages();
+          supportPollingInterval = setInterval(fetchSupportMessages, 3000);
+      });
+
+      document.getElementById('supportModal').addEventListener('hidden.bs.modal', () => {
+          if (supportPollingInterval) clearInterval(supportPollingInterval);
+      });
+
+      async function fetchSupportMessages() {
+          const res = await fetch(`/api/chat/messages?user_role=admin&user_id=1`);
+          if (!res.ok) return;
+          const msgs = await res.json();
+          if (msgs.length > lastSupportMsgCount && lastSupportMsgCount !== 0) {
+              const lastMsg = msgs[msgs.length - 1];
+              if (lastMsg.sender_type !== 'org' && typeof triggerNotification === 'function') {
+                  triggerNotification('Support Message from Admin', lastMsg.message_type === 'video' ? '[Video Recorded]' : lastMsg.message);
+              }
+          }
+          if (msgs.length === lastSupportMsgCount && lastSupportMsgCount !== 0) return;
+          lastSupportMsgCount = msgs.length;
+
+          const box = document.getElementById('supportChatBox');
+          box.innerHTML = '<div class="text-center my-2"><span class="encryption-badge"><i class="fas fa-lock me-1"></i> Messages are end-to-end encrypted.</span></div>';
+          
+          let lastDateStr = null;
+          const today = new Date().toDateString();
+          const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+          msgs.forEach(m => {
+              const msgDate = new Date(m.timestamp);
+              const dateStr = msgDate.toDateString();
+              if (dateStr !== lastDateStr) {
+                  let displayDate = (dateStr === today) ? 'Today' : (dateStr === yesterday ? 'Yesterday' : dateStr);
+                  const dateDiv = document.createElement('div');
+                  dateDiv.className = 'date-divider text-center my-3';
+                  dateDiv.innerHTML = `<span>${displayDate}</span>`;
+                  box.appendChild(dateDiv);
+                  lastDateStr = dateStr;
+              }
+              const div = document.createElement('div');
+              const isMe = m.sender_type === 'org';
+              div.className = `chat-row ${isMe ? 'me' : 'not-me'}`;
+              
+              const time = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              let content = linkify(m.message);
+              if (m.message_type === 'image') content = `<img src="${m.message}" onclick="window.open(this.src)" style="max-width: 100%; border-radius: 8px; cursor: pointer;">`;
+              else if (m.message_type === 'voice') content = `<audio src="${m.message}" controls style="max-width: 100%;"></audio>`;
+              else if (m.message_type === 'video') content = `<video src="${m.message}" controls preload="metadata" style="max-width: 100%; border-radius: 8px;"></video>`;
+              else if (m.message_type === 'document') {
+                  const filename = m.message.split('/').pop().substring(33);
+                  content = `<div class="d-flex align-items-center p-2 bg-black-50 rounded border border-secondary shadow-sm">
+                               <i class="fas ${getFileIcon(filename)} fs-4 me-3"></i>
+                               <div class="flex-grow-1 overflow-hidden">
+                                 <div class="small fw-bold text-truncate" title="${filename}">${filename}</div>
+                                 <a href="${m.message}" target="_blank" class="text-primary small text-decoration-none">Download <i class="fas fa-download ms-1"></i></a>
+                               </div>
+                             </div>`;
+              }
+              
+              div.innerHTML = `
+                  <div class="chat-bubble ${isMe ? 'sender' : 'receiver'}">
+                      <div class="chat-label fw-bold mb-1">${isMe ? 'You' : 'Admin'}</div>
+                      <div>${content}</div>
+                      <div class="text-end mt-1" style="font-size: 0.65rem; opacity: 0.7;">
+                          ${time}
+                          ${isMe ? (m.is_read ? '<i class="fas fa-check-double text-info ms-1"></i>' : '<i class="fas fa-check text-white ms-1"></i>') : ''}
+                      </div>
+                  </div>
+              `;
+              box.appendChild(div);
+          });
+          box.scrollTop = box.scrollHeight;
+
+          const unreadMsgs = msgs.filter(m => m.sender_type !== 'org' && m.is_read === 0);
+          if (unreadMsgs.length > 0 && !document.hidden && document.getElementById('supportModal').classList.contains('show')) {
+              fetch('/api/chat/read', {
+                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({ sender_type: unreadMsgs[0].sender_type, sender_id: unreadMsgs[0].sender_id })
+              });
+          }
+      }
+
+      async function sendSupportMessage(msg, type = 'text') {
+          await fetch('/api/chat/send', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                  receiver_id: 1,
+                  receiver_type: 'admin',
+                  message: msg,
+                  message_type: type
+              })
+          });
+          fetchSupportMessages();
+      }
+
+      document.getElementById('btnSupportSend').addEventListener('click', async () => {
+          const input = document.getElementById('supportChatInput');
+          if (!input.value.trim()) return;
+          await sendSupportMessage(input.value.trim());
+          input.value = '';
+      });
+
+      document.getElementById('supportChatInput').addEventListener('keypress', e => {
+          if (e.key === 'Enter') document.getElementById('btnSupportSend').click();
+      });
+
+      // Files & Voice
+      document.getElementById('supportImageInput').addEventListener('change', async e => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch('/api/chat/upload', {method: 'POST', body: formData});
+          const data = await res.json();
+          if (data.ok) {
+              let type = 'document';
+              const ext = file.name.split('.').pop().toLowerCase();
+              if (['png','jpg','jpeg','gif','webp','heic'].includes(ext)) type = 'image';
+              else if (['webm','mp4','mov','avi','mkv'].includes(ext)) type = 'video';
+              else if (['wav','mp3','ogg'].includes(ext)) type = 'voice';
+              sendSupportMessage(data.filepath, type);
+          }
+          e.target.value = '';
+      });
+
+      let supportMediaRecorder;
+      let supportAudioChunks = [];
+      document.getElementById('btnSupportRecord').addEventListener('click', async () => {
+          const btn = document.getElementById('btnSupportRecord');
+          if (!supportMediaRecorder || supportMediaRecorder.state === 'inactive') {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              supportMediaRecorder = new MediaRecorder(stream);
+              supportAudioChunks = [];
+              supportMediaRecorder.ondataavailable = e => supportAudioChunks.push(e.data);
+              supportMediaRecorder.onstop = async () => {
+                  const blob = new Blob(supportAudioChunks, { type: 'audio/webm' });
+                  const formData = new FormData();
+                  formData.append('file', new File([blob], "voice.webm", { type: "audio/webm" }));
+                  const res = await fetch('/api/chat/upload', {method: 'POST', body: formData});
+                  const data = await res.json();
+                  if (data.ok) sendSupportMessage(data.filepath, 'voice');
+                  btn.innerHTML = '<i class="fas fa-microphone"></i>';
+                  btn.classList.replace('btn-danger', 'btn-outline-secondary');
+              };
+              supportMediaRecorder.start();
+              btn.innerHTML = '<i class="fas fa-stop"></i>';
+              btn.classList.replace('btn-outline-secondary', 'btn-danger');
+          } else {
+              supportMediaRecorder.stop();
+          }
+      });
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ range(1, 100000) | random }}"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+# Virtual environments
+venv/
+env/
+.env
+
+# Cache files
+__pycache__/
+*.pyc
+
+# Database
+database.db
+
+# User uploads & Logs
+static/uploads/
+debug.log
+
+# IDE files
+.vscode/
+.idea/

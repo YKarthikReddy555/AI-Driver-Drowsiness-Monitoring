@@ -1,0 +1,22 @@
+{% extends "login_base.html" %}
+
+{% block title %}Admin Login{% endblock %}
+{% block page_title %}Admin Login{% endblock %}
+{% block page_desc %}System Administrator Access{% endblock %}
+{% block form_action %}{{ url_for('admin_login') }}{% endblock %}
+
+{% block form_content %}
+<div class="mb-3">
+  <label for="username" class="form-label text-secondary small">Username</label>
+  <input type="text" class="form-control bg-black text-light border-secondary" id="username" name="username" required autofocus>
+</div>
+<div class="mb-3">
+  <label for="password" class="form-label text-secondary small">Password</label>
+  <div class="pw-group">
+    <input type="password" class="form-control bg-black text-light border-secondary" id="password" name="password" required>
+    <button type="button" class="pw-toggle" onclick="togglePassword(this, 'password')">
+      <i class="fas fa-eye"></i>
+    </button>
+  </div>
+</div>
+{% endblock %}
