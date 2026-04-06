@@ -1,6 +1,6 @@
 flask>=3.0.0
 opencv-python-headless>=4.9.0
-numpy>=1.26.0
+numpy<2.0.0
 mediapipe>=0.10.0
 ultralytics>=8.1.0
 gunicorn>=21.2.0
