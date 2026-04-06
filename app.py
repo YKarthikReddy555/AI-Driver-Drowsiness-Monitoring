@@ -41,6 +41,11 @@ if not hasattr(cv2, 'waitKey'):
 if not hasattr(cv2, 'destroyAllWindows'):
     def _fake_destroy(): pass
     cv2.destroyAllWindows = _fake_destroy
+
+# Some headless OpenCV versions miss these constants required by Ultralytics
+if not hasattr(cv2, 'IMREAD_COLOR'): cv2.IMREAD_COLOR = 1
+if not hasattr(cv2, 'LINE_AA'): cv2.LINE_AA = 16
+if not hasattr(cv2, 'FONT_HERSHEY_SIMPLEX'): cv2.FONT_HERSHEY_SIMPLEX = 0
 # ------------------------------------------------------------------------
 
 import base64
