@@ -30,6 +30,19 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import cv2
+
+# --- HEADLESS PRODUCTION SHIM: Prevent YOLOv8 from crashing on Render ---
+if not hasattr(cv2, 'imshow'):
+    def _fake_imshow(winname, mat): pass
+    cv2.imshow = _fake_imshow
+if not hasattr(cv2, 'waitKey'):
+    def _fake_waitKey(delay=0): return -1
+    cv2.waitKey = _fake_waitKey
+if not hasattr(cv2, 'destroyAllWindows'):
+    def _fake_destroy(): pass
+    cv2.destroyAllWindows = _fake_destroy
+# ------------------------------------------------------------------------
+
 import base64
 import numpy as np
 import threading as _threading
