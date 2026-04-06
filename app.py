@@ -48,6 +48,14 @@ if not hasattr(cv2, 'LINE_AA'): cv2.LINE_AA = 16
 if not hasattr(cv2, 'FONT_HERSHEY_SIMPLEX'): cv2.FONT_HERSHEY_SIMPLEX = 0
 # ------------------------------------------------------------------------
 
+# --- MEDIAPIPE FORCE-IMPORT: Prevent AttributeErrors during start ---
+try:
+    import mediapipe.solutions.face_mesh
+    import mediapipe.solutions.drawing_utils
+except ImportError:
+    pass
+# ------------------------------------------------------------------------
+
 import base64
 import numpy as np
 import threading as _threading
